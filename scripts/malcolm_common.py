@@ -101,7 +101,7 @@ def YesOrNo(question, default=None, forceInteraction=False, acceptDefault=False)
     else:
         while True:
             reply = str(input(questionStr)).lower().strip()
-            if (len(reply) > 0) or (default is not None):
+            if reply != "" or default is not None:
                 break
 
     if len(reply) == 0:
@@ -119,19 +119,17 @@ def YesOrNo(question, default=None, forceInteraction=False, acceptDefault=False)
 # get interactive user response
 def AskForString(question, default=None, forceInteraction=False, acceptDefault=False):
 
-    if acceptDefault and (default is not None) and (not forceInteraction):
-        reply = default
-    else:
-        reply = str(input(f'\n{question}: ')).strip()
-
-    return reply
+    return (
+        default
+        if acceptDefault and (default is not None) and (not forceInteraction)
+        else str(input(f'\n{question}: ')).strip()
+    )
 
 
 ###################################################################################################
 # get interactive password (without echoing)
 def AskForPassword(prompt):
-    reply = getpass.getpass(prompt=prompt)
-    return reply
+    return getpass.getpass(prompt=prompt)
 
 
 ###################################################################################################
@@ -226,7 +224,7 @@ def run_process(
         if stdout and (len(cmdout) > 0):
             output.extend(cmdout.decode(sys.getdefaultencoding()).split('\n'))
 
-    except (FileNotFoundError, OSError, IOError) as e:
+    except (OSError, IOError) as e:
         if stderr:
             output.append(f"Command {command} not found or unable to execute")
 
@@ -257,33 +255,34 @@ def ImportRequests(debug=False):
 
         eprint(f'The requests module is required under Python {platform.python_version()} ({pyExec})')
 
-        if Which(pipCmd, debug=debug):
-            if YesOrNo(f'Importing the requests module failed. Attempt to install via {pipCmd}?'):
-                installCmd = None
+        if Which(pipCmd, debug=debug) and YesOrNo(
+            f'Importing the requests module failed. Attempt to install via {pipCmd}?'
+        ):
+            installCmd = None
 
-                if (pyPlatform == PLATFORM_LINUX) or (pyPlatform == PLATFORM_MAC):
-                    # for linux/mac, we're going to try to figure out if this python is owned by root or the script user
-                    if getpass.getuser() == getpwuid(os.stat(pyExec).st_uid).pw_name:
-                        # we're running a user-owned python, regular pip should work
-                        installCmd = [pipCmd, 'install', 'requests']
-                    else:
-                        # python is owned by system, so make sure to pass the --user flag
-                        installCmd = [pipCmd, 'install', '--user', 'requests']
-                else:
-                    # on windows (or whatever other platform this is) I don't know any other way other than pip
+            if pyPlatform in [PLATFORM_LINUX, PLATFORM_MAC]:
+                # for linux/mac, we're going to try to figure out if this python is owned by root or the script user
+                if getpass.getuser() == getpwuid(os.stat(pyExec).st_uid).pw_name:
+                    # we're running a user-owned python, regular pip should work
                     installCmd = [pipCmd, 'install', 'requests']
-
-                err, out = run_process(installCmd, debug=debug)
-                if err == 0:
-                    eprint("Installation of requests module apparently succeeded")
-                    try:
-                        import requests
-
-                        RequestsImported = True
-                    except ImportError as e:
-                        eprint(f"Importing the requests module still failed: {e}")
                 else:
-                    eprint(f"Installation of requests module failed: {out}")
+                    # python is owned by system, so make sure to pass the --user flag
+                    installCmd = [pipCmd, 'install', '--user', 'requests']
+            else:
+                # on windows (or whatever other platform this is) I don't know any other way other than pip
+                installCmd = [pipCmd, 'install', 'requests']
+
+            err, out = run_process(installCmd, debug=debug)
+            if err == 0:
+                eprint("Installation of requests module apparently succeeded")
+                try:
+                    import requests
+
+                    RequestsImported = True
+                except ImportError as e:
+                    eprint(f"Importing the requests module still failed: {e}")
+            else:
+                eprint(f"Installation of requests module failed: {out}")
 
     if not RequestsImported:
         eprint(

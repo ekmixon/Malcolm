@@ -110,19 +110,19 @@ def eprint(*args, **kwargs):
 # get interactive user response to Y/N question
 def YesOrNo(question, default=None, forceInteraction=False, acceptDefault=False):
 
-    if default == True:
-        questionStr = "\n{} (Y/n): ".format(question)
-    elif default == False:
-        questionStr = "\n{} (y/N): ".format(question)
+    if default == False:
+        questionStr = f"\n{question} (y/N): "
+    elif default == True:
+        questionStr = f"\n{question} (Y/n): "
     else:
-        questionStr = "\n{} (y/n): ".format(question)
+        questionStr = f"\n{question} (y/n): "
 
     if acceptDefault and (default is not None) and (not forceInteraction):
         reply = ''
     else:
         while True:
             reply = str(input(questionStr)).lower().strip()
-            if (len(reply) > 0) or (default is not None):
+            if reply != "" or default is not None:
                 break
 
     if len(reply) == 0:
@@ -140,19 +140,17 @@ def YesOrNo(question, default=None, forceInteraction=False, acceptDefault=False)
 # get interactive user response
 def AskForString(question, default=None, forceInteraction=False, acceptDefault=False):
 
-    if acceptDefault and (default is not None) and (not forceInteraction):
-        reply = default
-    else:
-        reply = str(input('\n{}: '.format(question))).strip()
-
-    return reply
+    return (
+        default
+        if acceptDefault and (default is not None) and (not forceInteraction)
+        else str(input(f'\n{question}: ')).strip()
+    )
 
 
 ###################################################################################################
 # get interactive password (without echoing)
 def AskForPassword(prompt):
-    reply = getpass.getpass(prompt=prompt)
-    return reply
+    return getpass.getpass(prompt=prompt)
 
 
 ###################################################################################################
@@ -173,7 +171,7 @@ def Which(cmd, debug=False):
     if (not result) and (platform.system() == PLATFORM_WINDOWS):
         result = os.access(os.path.join(os.getcwd(), cmd), os.X_OK)
     if debug:
-        eprint("Which {} returned {}".format(cmd, result))
+        eprint(f"Which {cmd} returned {result}")
     return result
 
 
@@ -236,16 +234,15 @@ def run_process(
             if stdout and (len(cmdout) > 0):
                 output.extend(cmdout.split('\n'))
 
-    except (FileNotFoundError, OSError, IOError) as e:
+    except (OSError, IOError) as e:
         if stderr:
-            output.append("Command {} not found or unable to execute".format(command))
+            output.append(f"Command {command} not found or unable to execute")
 
     if debug:
         eprint(
-            "{}{} returned {}: {}".format(
-                command, "({})".format(stdin[:80] + bool(stdin[80:]) * '...' if stdin else ""), retcode, output
-            )
+            f"""{command}({stdin[:80] + bool(stdin[80:]) * '...' if stdin else ""}) returned {retcode}: {output}"""
         )
+
 
     if (retcode != 0) and retry and (retry > 0):
         # sleep then retry
@@ -305,10 +302,10 @@ class Beatbox(object):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def build_beat_command(self, command):
         if not Which(self.beatExe, debug=self.debug):
-            raise Exception("Beat executable {} does not exist".format(self.beatExe))
+            raise Exception(f"Beat executable {self.beatExe} does not exist")
 
         if not os.path.isfile(self.ymlFileSpec):
-            raise Exception("Beat configuration {} does not exist".format(self.ymlFileSpec))
+            raise Exception(f"Beat configuration {self.ymlFileSpec} does not exist")
 
         # convert paths to absolutes
         ymlFileSpec = os.path.abspath(self.ymlFileSpec)
@@ -321,14 +318,17 @@ class Beatbox(object):
             '--path.config',
             ymlFilePath,
             '--path.data',
-            ymlFilePath if (self.platform == PLATFORM_WINDOWS) else os.path.join(ymlFilePath, 'data'),
+            ymlFilePath
+            if (self.platform == PLATFORM_WINDOWS)
+            else os.path.join(ymlFilePath, 'data'),
             '--path.logs',
             os.path.join(ymlFilePath, 'logs'),
             '-c',
             ymlFileSpec,
             '-E',
-            "keystore.path='{}'".format(self.keystorePath),
+            f"keystore.path='{self.keystorePath}'",
         ]
+
 
         return beatCmd + command if isinstance(command, list) else beatCmd + [command]
 
@@ -346,23 +346,19 @@ class Beatbox(object):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def configure_beat_yml(self):
         if self.debug:
-            eprint("{}: {}".format(self.__class__.__name__, inspect.currentframe().f_code.co_name))
+            eprint(f"{self.__class__.__name__}: {inspect.currentframe().f_code.co_name}")
 
         if self.ymlFileSpec is not None:
 
             if os.path.isfile(self.ymlFileSpec):
                 # if it doesn't look like connectivity stuff (at last BEAT_OS_PROTOCOL) is in the YML file, offer to append it
-                if (
-                    len(
-                        list(
-                            filter(
-                                lambda x: BEAT_OS_PROTOCOL in x, [line.rstrip('\n') for line in open(self.ymlFileSpec)]
-                            )
-                        )
+                if not list(
+                    filter(
+                        lambda x: BEAT_OS_PROTOCOL in x,
+                        [line.rstrip('\n') for line in open(self.ymlFileSpec)],
                     )
-                    == 0
                 ) and YesOrNo(
-                    "Append connectivity boilerplate to {}?".format(self.ymlFileSpec),
+                    f"Append connectivity boilerplate to {self.ymlFileSpec}?",
                     default=False,
                     acceptDefault=self.acceptDefaults,
                 ):
@@ -377,30 +373,33 @@ class Beatbox(object):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def configure_keystore(self):
         if self.debug:
-            eprint("{}: {}".format(self.__class__.__name__, inspect.currentframe().f_code.co_name))
+            eprint(f"{self.__class__.__name__}: {inspect.currentframe().f_code.co_name}")
 
         # check if keystore already exists
         err, out = self.run_beat_command(['keystore', 'list'])
-        if (err == 0) and (len(out) > 0):
-            if not YesOrNo(
-                "{} keystore already exists, overwrite?".format(self.beatName),
+        if (
+            (err == 0)
+            and (len(out) > 0)
+            and not YesOrNo(
+                f"{self.beatName} keystore already exists, overwrite?",
                 default=False,
                 acceptDefault=self.acceptDefaults,
-            ):
-                raise Exception("Configuration cancelled by user")
+            )
+        ):
+            raise Exception("Configuration cancelled by user")
 
         # create keystore
         err, out = self.run_beat_command(['keystore', 'create', '--force'])
         if err == 0:
             eprint('\n'.join(out))
         else:
-            raise Exception("Keystore creation failed: {}".format(out))
+            raise Exception(f"Keystore creation failed: {out}")
 
         # prompt for and store configuration items
         for destination in ['Elasticsearch', 'Kibana']:
 
             if YesOrNo(
-                "Configure {} {} connectivity?".format(self.beatName, destination),
+                f"Configure {self.beatName} {destination} connectivity?",
                 default=True,
                 acceptDefault=self.acceptDefaults,
             ):
@@ -409,10 +408,11 @@ class Beatbox(object):
                 tmpVal, tmpDefault = '', 'https'
                 while tmpVal not in ['http', 'https']:
                     tmpVal = AskForString(
-                        "Enter {} connection protocol (http or https) [{}]".format(destination, tmpDefault),
+                        f"Enter {destination} connection protocol (http or https) [{tmpDefault}]",
                         default=tmpDefault,
                         acceptDefault=self.acceptDefaults,
                     ).lower()
+
                     if len(tmpVal) == 0:
                         tmpVal = tmpDefault
                 self.keystoreItems[
@@ -423,12 +423,11 @@ class Beatbox(object):
                 tmpVal, tmpDefault = '', 'none'
                 while tmpVal not in ['none', 'full']:
                     tmpVal = AskForString(
-                        "Enter {} SSL verification (none (for self-signed certificates) or full) [{}]".format(
-                            destination, tmpDefault
-                        ),
+                        f"Enter {destination} SSL verification (none (for self-signed certificates) or full) [{tmpDefault}]",
                         default=tmpDefault,
                         acceptDefault=self.acceptDefaults,
                     ).lower()
+
                     if len(tmpVal) == 0:
                         tmpVal = tmpDefault
                 self.keystoreItems[
@@ -437,39 +436,40 @@ class Beatbox(object):
 
                 # host
                 tmpVal, tmpDefault = '', ''
-                while len(tmpVal) == 0:
+                while not tmpVal:
                     tmpVal = AskForString(
-                        "Enter {} connection host".format(destination),
+                        f"Enter {destination} connection host",
                         default=tmpDefault,
                         acceptDefault=self.acceptDefaults,
                     )
+
                 self.keystoreItems[
                     BEAT_OS_HOST.replace('_OS_', '_KIBANA_' if (destination == 'Kibana') else '_OS_')
                 ] = tmpVal
 
-        if BEAT_DASHBOARDS_HOST in self.keystoreItems:
+        if BEAT_DASHBOARDS_HOST in self.keystoreItems and YesOrNo(
+            f"Configure {self.beatName} Kibana dashboards?",
+            default=True,
+            acceptDefault=self.acceptDefaults,
+        ):
+            self.keystoreItems[BEAT_DASHBOARDS_ENABLED] = 'true'
 
-            #  configure kibana dashboards
-            if YesOrNo(
-                "Configure {} Kibana dashboards?".format(self.beatName), default=True, acceptDefault=self.acceptDefaults
-            ):
-                self.keystoreItems[BEAT_DASHBOARDS_ENABLED] = 'true'
+            # kibana dashboards
+            tmpVal, tmpDefault = '', self.defaultKibanaDashboardDir
+            while not tmpVal:
+                tmpVal = AskForString(
+                    f"Enter directory containing Kibana dashboards [{tmpDefault}]",
+                    default=tmpDefault,
+                    acceptDefault=self.acceptDefaults,
+                )
 
-                # kibana dashboards
-                tmpVal, tmpDefault = '', self.defaultKibanaDashboardDir
-                while len(tmpVal) == 0:
-                    tmpVal = AskForString(
-                        "Enter directory containing Kibana dashboards [{}]".format(tmpDefault),
-                        default=tmpDefault,
-                        acceptDefault=self.acceptDefaults,
-                    )
-                    if len(tmpVal) == 0:
-                        tmpVal = tmpDefault
-                self.keystoreItems[BEAT_DASHBOARDS_PATH] = tmpVal
+                if len(tmpVal) == 0:
+                    tmpVal = tmpDefault
+            self.keystoreItems[BEAT_DASHBOARDS_PATH] = tmpVal
 
         # username
         tmpVal, tmpDefault = '', ''
-        while len(tmpVal) == 0:
+        while not tmpVal:
             tmpVal = AskForString(
                 "Enter HTTP/HTTPS server username", default=tmpDefault, acceptDefault=self.acceptDefaults
             )
@@ -477,11 +477,15 @@ class Beatbox(object):
 
         # password
         tmpVal, tmpValConfirm = '', 'xxxx'
-        while (len(tmpVal) == 0) and (tmpVal != tmpValConfirm):
-            tmpVal = AskForPassword("Enter password for {}: ".format(self.keystoreItems[BEAT_HTTP_USERNAME]))
-            tmpValConfirm = AskForPassword(
-                "Enter password for {} (again): ".format(self.keystoreItems[BEAT_HTTP_USERNAME])
+        while not tmpVal and tmpVal != tmpValConfirm:
+            tmpVal = AskForPassword(
+                f"Enter password for {self.keystoreItems[BEAT_HTTP_USERNAME]}: "
             )
+
+            tmpValConfirm = AskForPassword(
+                f"Enter password for {self.keystoreItems[BEAT_HTTP_USERNAME]} (again): "
+            )
+
             if tmpVal != tmpValConfirm:
                 eprint('Passwords do not match')
                 tmpVal, tmpValConfirm = '', 'xxxx'
@@ -491,20 +495,19 @@ class Beatbox(object):
         for key, value in self.keystoreItems.items():
             err, out = self.run_beat_command(['keystore', 'add', key, '--stdin', '--force'], stdin=value)
             if err != 0:
-                raise Exception("Failed to add {} to {} keystore: {}".format(key, self.beatName, out))
+                raise Exception(f"Failed to add {key} to {self.beatName} keystore: {out}")
 
         # list keystore
         err, out = self.run_beat_command(['keystore', 'list'])
-        if err == 0:
-            eprint('Generated keystore for {}'.format(self.beatName))
-            eprint('\n'.join(out))
-        else:
-            raise Exception("Failed to enumerate keystore: {}".format(out))
+        if err != 0:
+            raise Exception(f"Failed to enumerate keystore: {out}")
+        eprint(f'Generated keystore for {self.beatName}')
+        eprint('\n'.join(out))
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def beat_run(self):
         if self.debug:
-            eprint("{}: {}".format(self.__class__.__name__, inspect.currentframe().f_code.co_name))
+            eprint(f"{self.__class__.__name__}: {inspect.currentframe().f_code.co_name}")
 
         process = Popen(self.build_beat_command(['run', '-e']), stdout=PIPE)
         while True:
@@ -531,12 +534,15 @@ class LinuxBeatbox(Beatbox):
         if not Which(self.beatExe, debug=self.debug):
             self.beatExe = self.beatExe.lower() if (self.beatExe is not None) else self.beatName.lower()
 
-        self.beatInstallDir = "/usr/share/{}".format(self.beatName)
+        self.beatInstallDir = f"/usr/share/{self.beatName}"
         self.defaultKibanaDashboardDir = os.path.join(self.beatInstallDir, 'kibana')
         self.keystorePath = os.path.join(
-            os.path.join(os.path.dirname(os.path.abspath(self.ymlFileSpec)), 'data'),
-            "{}.keystore".format(self.beatName),
+            os.path.join(
+                os.path.dirname(os.path.abspath(self.ymlFileSpec)), 'data'
+            ),
+            f"{self.beatName}.keystore",
         )
+
 
         self.distro = None
         self.codename = None
@@ -546,7 +552,7 @@ class LinuxBeatbox(Beatbox):
 
         # check /etc/os-release values first
         if os.path.isfile('/etc/os-release'):
-            osInfo = dict()
+            osInfo = {}
 
             with open("/etc/os-release", 'r') as f:
                 for line in f:
@@ -596,7 +602,7 @@ class LinuxBeatbox(Beatbox):
                     distroVals = f.read().lower().split()
                     distroNums = [x for x in distroVals if x[0].isdigit()]
                     self.distro = distroVals[0]
-                    if (self.release is None) and (len(distroNums) > 0):
+                    if self.release is None and distroNums:
                         self.release = distroNums[0]
 
         if self.distro is None:
@@ -604,12 +610,9 @@ class LinuxBeatbox(Beatbox):
 
         if self.debug:
             eprint(
-                "distro: {}{}{}".format(
-                    self.distro,
-                    " {}".format(self.codename) if self.codename else "",
-                    " {}".format(self.release) if self.release else "",
-                )
+                f'distro: {self.distro}{f" {self.codename}" if self.codename else ""}{f" {self.release}" if self.release else ""}'
             )
+
 
         if not self.codename:
             self.codename = self.distro
@@ -624,10 +627,10 @@ class LinuxBeatbox(Beatbox):
         localModulePath = os.path.join(os.path.abspath(self.ymlFilePath), 'module')
         installedModulePath = os.path.join(self.beatInstallDir, 'module')
         if (
-            (not os.path.exists(localModulePath))
+            not os.path.exists(localModulePath)
             and (os.path.isdir(installedModulePath))
             and YesOrNo(
-                "Create symlink to module path {} as {}?".format(installedModulePath, localModulePath),
+                f"Create symlink to module path {installedModulePath} as {localModulePath}?",
                 default=True,
                 acceptDefault=self.acceptDefaults,
             )
@@ -641,16 +644,12 @@ class LinuxBeatbox(Beatbox):
         else:
             super(LinuxBeatbox, self).configure_keystore()
 
-        pass
-
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def beat_run(self):
         if PY3:
             super().beat_run()
         else:
             super(LinuxBeatbox, self).beat_run()
-
-        pass
 
 
 ###################################################################################################
@@ -664,12 +663,18 @@ class WindowsBeatbox(Beatbox):
             super(WindowsBeatbox, self).__init__(debug=debug, ymlFileSpec=ymlFileSpec, beatName=beatName)
 
         if not Which(self.beatExe, debug=self.debug):
-            self.beatExe = self.beatExe + '.exe' if (self.beatExe is not None) else self.beatName + '.exe'
+            self.beatExe = (
+                f'{self.beatExe}.exe'
+                if self.beatExe is not None
+                else f'{self.beatName}.exe'
+            )
+
 
         self.beatInstallDir = os.path.abspath(self.ymlFilePath)
         self.defaultKibanaDashboardDir = os.path.join(self.beatInstallDir, 'kibana')
         self.keystorePath = os.path.join(
-            os.path.dirname(os.path.abspath(self.ymlFileSpec)), "{}.keystore".format(self.beatName)
+            os.path.dirname(os.path.abspath(self.ymlFileSpec)),
+            f"{self.beatName}.keystore",
         )
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -679,8 +684,6 @@ class WindowsBeatbox(Beatbox):
         else:
             super(WindowsBeatbox, self).configure_beat_yml()
 
-        pass
-
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def configure_keystore(self):
         if PY3:
@@ -688,16 +691,12 @@ class WindowsBeatbox(Beatbox):
         else:
             super(WindowsBeatbox, self).configure_keystore()
 
-        pass
-
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def beat_run(self):
         if PY3:
             super().beat_run()
         else:
             super(WindowsBeatbox, self).beat_run()
-
-        pass
 
 
 ###################################################################################################
@@ -713,11 +712,13 @@ class MacBeatbox(Beatbox):
         if not Which(self.beatExe, debug=self.debug):
             self.beatExe = self.beatExe.lower() if (self.beatExe is not None) else self.beatName.lower()
 
-        self.beatInstallDir = "/Library/Application Support/elastic/{}".format(self.beatName)
+        self.beatInstallDir = f"/Library/Application Support/elastic/{self.beatName}"
         self.defaultKibanaDashboardDir = os.path.join(self.beatInstallDir, 'kibana')
         self.keystorePath = os.path.join(
-            os.path.join(os.path.dirname(os.path.abspath(self.ymlFileSpec)), 'data'),
-            "{}.keystore".format(self.beatName),
+            os.path.join(
+                os.path.dirname(os.path.abspath(self.ymlFileSpec)), 'data'
+            ),
+            f"{self.beatName}.keystore",
         )
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -730,10 +731,10 @@ class MacBeatbox(Beatbox):
         localModulePath = os.path.join(os.path.abspath(self.ymlFilePath), 'module')
         installedModulePath = os.path.join(self.beatInstallDir, 'module')
         if (
-            (not os.path.exists(localModulePath))
+            not os.path.exists(localModulePath)
             and (os.path.isdir(installedModulePath))
             and YesOrNo(
-                "Create symlink to module path {} as {}?".format(installedModulePath, localModulePath),
+                f"Create symlink to module path {installedModulePath} as {localModulePath}?",
                 default=True,
                 acceptDefault=self.acceptDefaults,
             )
@@ -747,13 +748,9 @@ class MacBeatbox(Beatbox):
         else:
             super(MacBeatbox, self).configure_keystore()
 
-        pass
-
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def beat_run(self):
         if PY3:
             super().beat_run()
         else:
             super(MacBeatbox, self).beat_run()
-
-        pass

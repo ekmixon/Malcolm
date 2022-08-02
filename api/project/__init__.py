@@ -14,107 +14,163 @@ from datetime import datetime
 from flask import Flask, jsonify, request
 
 # map categories of field names to OpenSearch dashboards
-fields_to_urls = []
-fields_to_urls.append(
+fields_to_urls = [
     [
         r'^event\.(risk|severity)\w*$',
-        ['DASH:d2dd0180-06b1-11ec-8c6b-353266ade330', 'DASH:95479950-41f2-11ea-88fa-7151df485405'],
-    ]
-)
-fields_to_urls.append([r'^related\.(user|password)$', ['DASH:95479950-41f2-11ea-88fa-7151df485405']])
-fields_to_urls.append([r'^event\.(action|result)$', ['DASH:a33e0a50-afcd-11ea-993f-b7d8522a8bed']])
-fields_to_urls.append([r'^event\.(dataset|provider)$', ['DASH:0ad3d7c2-3441-485e-9dfe-dbb22e84e576']])
-fields_to_urls.append(
+        [
+            'DASH:d2dd0180-06b1-11ec-8c6b-353266ade330',
+            'DASH:95479950-41f2-11ea-88fa-7151df485405',
+        ],
+    ],
+    [
+        r'^related\.(user|password)$',
+        ['DASH:95479950-41f2-11ea-88fa-7151df485405'],
+    ],
+    [
+        r'^event\.(action|result)$',
+        ['DASH:a33e0a50-afcd-11ea-993f-b7d8522a8bed'],
+    ],
+    [
+        r'^event\.(dataset|provider)$',
+        ['DASH:0ad3d7c2-3441-485e-9dfe-dbb22e84e576'],
+    ],
     [
         r'^(zeek\.conn\.|(source|destination|related).(oui|ip|port|mac|geo)|network\.(community_id|transport|protocol\w*))$',
         ['DASH:abdd7550-2c7c-40dc-947e-f6d186a158c4'],
-    ]
-)
-fields_to_urls.append(
-    [r'^zeek\.bacnet.*\.', ['DASH:2bec1490-eb94-11e9-a384-0fcf32210194', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf']]
-)
-fields_to_urls.append(
-    [r'^zeek\.bestguess\.', ['DASH:12e3a130-d83b-11eb-a0b0-f328ce09b0b7', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf']]
-)
-fields_to_urls.append(
-    [r'^zeek\.bsap.*\.', ['DASH:ca5799a0-56b5-11eb-b749-576de068f8ad', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf']]
-)
-fields_to_urls.append([r'^zeek\.dce_rpc\.', ['DASH:432af556-c5c0-4cc3-8166-b274b4e3a406']])
-fields_to_urls.append([r'^zeek\.dhcp\.', ['DASH:2d98bb8e-214c-4374-837b-20e1bcd63a5e']])
-fields_to_urls.append(
-    [r'^zeek\.dnp3.*\.', ['DASH:870a5862-6c26-4a08-99fd-0c06cda85ba3', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf']]
-)
-fields_to_urls.append(
-    [r'^((source|destination)\.ip_reverse_dns|zeek\.dns\.)', ['DASH:2cf94cd0-ecab-40a5-95a7-8419f3a39cd9']]
-)
-fields_to_urls.append(
-    [r'^zeek\.ecat.*\.', ['DASH:4a073440-b286-11eb-a4d4-09fa12a6ebd4', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf']]
-)
-fields_to_urls.append(
-    [r'^zeek\.(cip|enip)\.', ['DASH:29a1b290-eb98-11e9-a384-0fcf32210194', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf']]
-)
-fields_to_urls.append([r'^(related\.hash|(zeek\.)?files\.)', ['DASH:9ee51f94-3316-4fc5-bd89-93a52af69714']])
-fields_to_urls.append([r'^zeek\.ftp\.', ['DASH:078b9aa5-9bd4-4f02-ae5e-cf80fa6f887b']])
-fields_to_urls.append([r'^zeek\.gquic\.', ['DASH:11ddd980-e388-11e9-b568-cf17de8e860c']])
-fields_to_urls.append([r'^zeek\.http\.', ['DASH:37041ee1-79c0-4684-a436-3173b0e89876']])
-fields_to_urls.append([r'^zeek\.intel\.', ['DASH:36ed695f-edcc-47c1-b0ec-50d20c93ce0f']])
-fields_to_urls.append([r'^zeek\.irc\.', ['DASH:76f2f912-80da-44cd-ab66-6a73c8344cc3']])
-fields_to_urls.append([r'^zeek\.kerberos\.', ['DASH:82da3101-2a9c-4ae2-bb61-d447a3fbe673']])
-fields_to_urls.append([r'^zeek\.ldap.*\.', ['DASH:05e3e000-f118-11e9-acda-83a8e29e1a24']])
-fields_to_urls.append([r'^zeek\.login\.', ['DASH:c2549e10-7f2e-11ea-9f8a-1fe1327e2cd2']])
-fields_to_urls.append(
+    ],
+    [
+        r'^zeek\.bacnet.*\.',
+        [
+            'DASH:2bec1490-eb94-11e9-a384-0fcf32210194',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [
+        r'^zeek\.bestguess\.',
+        [
+            'DASH:12e3a130-d83b-11eb-a0b0-f328ce09b0b7',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [
+        r'^zeek\.bsap.*\.',
+        [
+            'DASH:ca5799a0-56b5-11eb-b749-576de068f8ad',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [r'^zeek\.dce_rpc\.', ['DASH:432af556-c5c0-4cc3-8166-b274b4e3a406']],
+    [r'^zeek\.dhcp\.', ['DASH:2d98bb8e-214c-4374-837b-20e1bcd63a5e']],
+    [
+        r'^zeek\.dnp3.*\.',
+        [
+            'DASH:870a5862-6c26-4a08-99fd-0c06cda85ba3',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [
+        r'^((source|destination)\.ip_reverse_dns|zeek\.dns\.)',
+        ['DASH:2cf94cd0-ecab-40a5-95a7-8419f3a39cd9'],
+    ],
+    [
+        r'^zeek\.ecat.*\.',
+        [
+            'DASH:4a073440-b286-11eb-a4d4-09fa12a6ebd4',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [
+        r'^zeek\.(cip|enip)\.',
+        [
+            'DASH:29a1b290-eb98-11e9-a384-0fcf32210194',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [
+        r'^(related\.hash|(zeek\.)?files\.)',
+        ['DASH:9ee51f94-3316-4fc5-bd89-93a52af69714'],
+    ],
+    [r'^zeek\.ftp\.', ['DASH:078b9aa5-9bd4-4f02-ae5e-cf80fa6f887b']],
+    [r'^zeek\.gquic\.', ['DASH:11ddd980-e388-11e9-b568-cf17de8e860c']],
+    [r'^zeek\.http\.', ['DASH:37041ee1-79c0-4684-a436-3173b0e89876']],
+    [r'^zeek\.intel\.', ['DASH:36ed695f-edcc-47c1-b0ec-50d20c93ce0f']],
+    [r'^zeek\.irc\.', ['DASH:76f2f912-80da-44cd-ab66-6a73c8344cc3']],
+    [r'^zeek\.kerberos\.', ['DASH:82da3101-2a9c-4ae2-bb61-d447a3fbe673']],
+    [r'^zeek\.ldap.*\.', ['DASH:05e3e000-f118-11e9-acda-83a8e29e1a24']],
+    [r'^zeek\.login\.', ['DASH:c2549e10-7f2e-11ea-9f8a-1fe1327e2cd2']],
     [
         r'^zeek\.(known_modbus|modbus).*\.',
-        ['DASH:152f29dc-51a2-4f53-93e9-6e92765567b8', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf'],
-    ]
-)
-fields_to_urls.append([r'^zeek\.mqtt.*\.', ['DASH:87a32f90-ef58-11e9-974e-9d600036d105']])
-fields_to_urls.append([r'^zeek\.mysql\.', ['DASH:50ced171-1b10-4c3f-8b67-2db9635661a6']])
-fields_to_urls.append(
-    [r'^zeek\.notice\.', ['DASH:f1f09567-fc7f-450b-a341-19d2f2bb468b', 'DASH:95479950-41f2-11ea-88fa-7151df485405']]
-)
-fields_to_urls.append([r'^zeek\.ntlm\.', ['DASH:543118a9-02d7-43fe-b669-b8652177fc37']])
-fields_to_urls.append([r'^zeek\.ntp\.', ['DASH:af5df620-eeb6-11e9-bdef-65a192b7f586']])
-fields_to_urls.append(
-    [r'^zeek\.opcua.*\.', ['DASH:dd87edd0-796a-11ec-9ce6-b395c1ff58f4', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf']]
-)
-fields_to_urls.append([r'^zeek\.ospf\.', ['DASH:1cc01ff0-5205-11ec-a62c-7bc80e88f3f0']])
-fields_to_urls.append([r'^zeek\.pe\.', ['DASH:0a490422-0ce9-44bf-9a2d-19329ddde8c3']])
-fields_to_urls.append(
-    [r'^zeek\.profinet.*\.', ['DASH:a7514350-eba6-11e9-a384-0fcf32210194', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf']]
-)
-fields_to_urls.append([r'^zeek\.radius\.', ['DASH:ae79b7d1-4281-4095-b2f6-fa7eafda9970']])
-fields_to_urls.append([r'^zeek\.rdp\.', ['DASH:7f41913f-cba8-43f5-82a8-241b7ead03e0']])
-fields_to_urls.append([r'^zeek\.rfb\.', ['DASH:f77bf097-18a8-465c-b634-eb2acc7a4f26']])
-fields_to_urls.append(
+        [
+            'DASH:152f29dc-51a2-4f53-93e9-6e92765567b8',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [r'^zeek\.mqtt.*\.', ['DASH:87a32f90-ef58-11e9-974e-9d600036d105']],
+    [r'^zeek\.mysql\.', ['DASH:50ced171-1b10-4c3f-8b67-2db9635661a6']],
+    [
+        r'^zeek\.notice\.',
+        [
+            'DASH:f1f09567-fc7f-450b-a341-19d2f2bb468b',
+            'DASH:95479950-41f2-11ea-88fa-7151df485405',
+        ],
+    ],
+    [r'^zeek\.ntlm\.', ['DASH:543118a9-02d7-43fe-b669-b8652177fc37']],
+    [r'^zeek\.ntp\.', ['DASH:af5df620-eeb6-11e9-bdef-65a192b7f586']],
+    [
+        r'^zeek\.opcua.*\.',
+        [
+            'DASH:dd87edd0-796a-11ec-9ce6-b395c1ff58f4',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [r'^zeek\.ospf\.', ['DASH:1cc01ff0-5205-11ec-a62c-7bc80e88f3f0']],
+    [r'^zeek\.pe\.', ['DASH:0a490422-0ce9-44bf-9a2d-19329ddde8c3']],
+    [
+        r'^zeek\.profinet.*\.',
+        [
+            'DASH:a7514350-eba6-11e9-a384-0fcf32210194',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [r'^zeek\.radius\.', ['DASH:ae79b7d1-4281-4095-b2f6-fa7eafda9970']],
+    [r'^zeek\.rdp\.', ['DASH:7f41913f-cba8-43f5-82a8-241b7ead03e0']],
+    [r'^zeek\.rfb\.', ['DASH:f77bf097-18a8-465c-b634-eb2acc7a4f26']],
     [
         r'^zeek\.(s7comm|iso_cotp)\.',
-        ['DASH:e76d05c0-eb9f-11e9-a384-0fcf32210194', 'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf'],
-    ]
-)
-fields_to_urls.append(
-    [r'^zeek\.signatures\.', ['DASH:665d1610-523d-11e9-a30e-e3576242f3ed', 'DASH:95479950-41f2-11ea-88fa-7151df485405']]
-)
-fields_to_urls.append([r'^zeek\.sip\.', ['DASH:0b2354ae-0fe9-4fd9-b156-1c3870e5c7aa']])
-fields_to_urls.append([r'^zeek\.smb.*\.', ['DASH:42e831b9-41a9-4f35-8b7d-e1566d368773']])
-fields_to_urls.append([r'^zeek\.smtp\.', ['DASH:bb827f8e-639e-468c-93c8-9f5bc132eb8f']])
-fields_to_urls.append([r'^zeek\.snmp\.', ['DASH:4e5f106e-c60a-4226-8f64-d534abb912ab']])
-fields_to_urls.append([r'^zeek\.software\.', ['DASH:87d990cc-9e0b-41e5-b8fe-b10ae1da0c85']])
-fields_to_urls.append([r'^zeek\.ssh\.', ['DASH:caef3ade-d289-4d05-a511-149f3e97f238']])
-fields_to_urls.append([r'^zeek\.stun.*\.', ['DASH:fa477130-2b8a-11ec-a9f2-3911c8571bfd']])
-fields_to_urls.append([r'^zeek\.syslog\.', ['DASH:92985909-dc29-4533-9e80-d3182a0ecf1d']])
-fields_to_urls.append([r'^zeek\.tds\.', ['DASH:bed185a0-ef82-11e9-b38a-2db3ee640e88']])
-fields_to_urls.append([r'^zeek\.tds_rpc\.', ['DASH:32587740-ef88-11e9-b38a-2db3ee640e88']])
-fields_to_urls.append([r'^zeek\.tds_sql_batch\.', ['DASH:fa141950-ef89-11e9-b38a-2db3ee640e88']])
-fields_to_urls.append([r'^zeek\.tftp\.', ['DASH:bf5efbb0-60f1-11eb-9d60-dbf0411cfc48']])
-fields_to_urls.append([r'^zeek\.tunnel\.', ['DASH:11be6381-beef-40a7-bdce-88c5398392fc']])
-fields_to_urls.append([r'^zeek\.weird\.', ['DASH:1fff49f6-0199-4a0f-820b-721aff9ff1f1']])
-fields_to_urls.append(
+        [
+            'DASH:e76d05c0-eb9f-11e9-a384-0fcf32210194',
+            'DASH:4a4bde20-4760-11ea-949c-bbb5a9feecbf',
+        ],
+    ],
+    [
+        r'^zeek\.signatures\.',
+        [
+            'DASH:665d1610-523d-11e9-a30e-e3576242f3ed',
+            'DASH:95479950-41f2-11ea-88fa-7151df485405',
+        ],
+    ],
+    [r'^zeek\.sip\.', ['DASH:0b2354ae-0fe9-4fd9-b156-1c3870e5c7aa']],
+    [r'^zeek\.smb.*\.', ['DASH:42e831b9-41a9-4f35-8b7d-e1566d368773']],
+    [r'^zeek\.smtp\.', ['DASH:bb827f8e-639e-468c-93c8-9f5bc132eb8f']],
+    [r'^zeek\.snmp\.', ['DASH:4e5f106e-c60a-4226-8f64-d534abb912ab']],
+    [r'^zeek\.software\.', ['DASH:87d990cc-9e0b-41e5-b8fe-b10ae1da0c85']],
+    [r'^zeek\.ssh\.', ['DASH:caef3ade-d289-4d05-a511-149f3e97f238']],
+    [r'^zeek\.stun.*\.', ['DASH:fa477130-2b8a-11ec-a9f2-3911c8571bfd']],
+    [r'^zeek\.syslog\.', ['DASH:92985909-dc29-4533-9e80-d3182a0ecf1d']],
+    [r'^zeek\.tds\.', ['DASH:bed185a0-ef82-11e9-b38a-2db3ee640e88']],
+    [r'^zeek\.tds_rpc\.', ['DASH:32587740-ef88-11e9-b38a-2db3ee640e88']],
+    [r'^zeek\.tds_sql_batch\.', ['DASH:fa141950-ef89-11e9-b38a-2db3ee640e88']],
+    [r'^zeek\.tftp\.', ['DASH:bf5efbb0-60f1-11eb-9d60-dbf0411cfc48']],
+    [r'^zeek\.tunnel\.', ['DASH:11be6381-beef-40a7-bdce-88c5398392fc']],
+    [r'^zeek\.weird\.', ['DASH:1fff49f6-0199-4a0f-820b-721aff9ff1f1']],
     [
         r'^zeek\.(ssl|ocsp|known_certs|x509)\.',
-        ['DASH:7f77b58a-df3e-4cc2-b782-fd7f8bad8ffb', 'DASH:024062a6-48d6-498f-a91a-3bf2da3a3cd3'],
-    ]
-)
+        [
+            'DASH:7f77b58a-df3e-4cc2-b782-fd7f8bad8ffb',
+            'DASH:024062a6-48d6-498f-a91a-3bf2da3a3cd3',
+        ],
+    ],
+]
 
 # field type maps from our various field sources
 field_type_map = defaultdict(lambda: 'string')
@@ -145,16 +201,11 @@ def deep_get(d, keys, default=None):
     assert type(keys) is list
     if d is None:
         return default
-    if not keys:
-        return d
-    return deep_get(d.get(keys[0]), keys[1:], default)
+    return deep_get(d.get(keys[0]), keys[1:], default) if keys else d
 
 
 def get_iterable(x):
-    if isinstance(x, Iterable) and not isinstance(x, str):
-        return x
-    else:
-        return (x,)
+    return x if isinstance(x, Iterable) and not isinstance(x, str) else (x, )
 
 
 def gettimes(args):
@@ -330,26 +381,24 @@ def filtervalues(search, args):
         for fieldname, filtervalue in filters.items():
             if fieldname.startswith('!'):
                 # AND NOT filter
-                if filtervalue is not None:
-                    # field != value
-                    s = s.exclude(
+                s = (
+                    s.exclude(
                         "terms",
                         **{fieldname[1:]: get_iterable(filtervalue)},
                     )
-                else:
-                    # field exists ("is not null")
-                    s = s.filter("exists", field=fieldname[1:])
+                    if filtervalue is not None
+                    else s.filter("exists", field=fieldname[1:])
+                )
+
+            elif filtervalue is not None:
+                # field == value
+                s = s.filter(
+                    "terms",
+                    **{fieldname: get_iterable(filtervalue)},
+                )
             else:
-                # AND filter
-                if filtervalue is not None:
-                    # field == value
-                    s = s.filter(
-                        "terms",
-                        **{fieldname: get_iterable(filtervalue)},
-                    )
-                else:
-                    # field does not exist ("is null")
-                    s = s.filter('bool', must_not=opensearch_dsl.Q('exists', field=fieldname))
+                # field does not exist ("is null")
+                s = s.filter('bool', must_not=opensearch_dsl.Q('exists', field=fieldname))
 
     return (filters, s)
 

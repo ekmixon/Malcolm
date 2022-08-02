@@ -21,8 +21,11 @@ def main():
     # extract arguments from the command line
     # print (sys.argv[1:]);
     parser = argparse.ArgumentParser(
-        description='Beat configure script', add_help=False, usage='{} <arguments>'.format(ScriptName)
+        description='Beat configure script',
+        add_help=False,
+        usage=f'{ScriptName} <arguments>',
     )
+
     parser.add_argument(
         '-v', '--verbose', dest='debug', type=str2bool, nargs='?', const=True, default=False, help="Verbose output"
     )
@@ -59,17 +62,17 @@ def main():
 
     if args.debug:
         eprint(os.path.join(ScriptPath, ScriptName))
-        eprint("Arguments: {}".format(sys.argv[1:]))
-        eprint("Arguments: {}".format(args))
+        eprint(f"Arguments: {sys.argv[1:]}")
+        eprint(f"Arguments: {args}")
     else:
         sys.tracebacklimit = 0
 
     args.beatName = args.beatName.lower()
     if not args.beatName.endswith('beat'):
-        args.beatName = args.beatName + 'beat'
+        args.beatName = f'{args.beatName}beat'
 
     if args.configFile is None:
-        args.configFile = args.beatName + '.yml'
+        args.configFile = f'{args.beatName}.yml'
 
     installerPlatform = platform.system()
     if installerPlatform == PLATFORM_LINUX:

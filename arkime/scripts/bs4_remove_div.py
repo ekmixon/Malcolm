@@ -16,9 +16,8 @@ scriptPath = os.path.dirname(os.path.realpath(__file__))
 origPath = os.getcwd()
 
 ###################################################################################################
-if not PY3:
-    if hasattr(__builtins__, 'raw_input'):
-        input = raw_input
+if not PY3 and hasattr(__builtins__, 'raw_input'):
+    input = raw_input
 
 try:
     FileNotFoundError
@@ -47,7 +46,12 @@ def str2bool(v):
 def main():
     global debug
 
-    parser = argparse.ArgumentParser(description=scriptName, add_help=False, usage='{} <arguments>'.format(scriptName))
+    parser = argparse.ArgumentParser(
+        description=scriptName,
+        add_help=False,
+        usage=f'{scriptName} <arguments>',
+    )
+
     parser.add_argument(
         '-v', '--verbose', dest='debug', type=str2bool, nargs='?', const=True, default=False, help="Verbose output"
     )
@@ -90,11 +94,10 @@ def main():
         parser.print_help()
         exit(2)
 
-    debug = args.debug
-    if debug:
+    if debug := args.debug:
         eprint(os.path.join(scriptPath, scriptName))
-        eprint("Arguments: {}".format(sys.argv[1:]))
-        eprint("Arguments: {}".format(args))
+        eprint(f"Arguments: {sys.argv[1:]}")
+        eprint(f"Arguments: {args}")
     else:
         sys.tracebacklimit = 0
 

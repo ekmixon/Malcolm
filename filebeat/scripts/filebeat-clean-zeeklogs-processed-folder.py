@@ -16,13 +16,13 @@ import pprint
 import re
 from subprocess import Popen, PIPE
 
-lockFilename = os.path.join(gettempdir(), '{}.lock'.format(os.path.basename(__file__)))
+lockFilename = os.path.join(gettempdir(), f'{os.path.basename(__file__)}.lock')
 broDir = os.path.join(os.getenv('FILEBEAT_ZEEK_DIR', "/data/zeek/"), '')
 cleanLogSeconds = int(os.getenv('FILEBEAT_LOG_CLEANUP_MINUTES', "30")) * 60
 cleanZipSeconds = int(os.getenv('FILEBEAT_ZIP_CLEANUP_MINUTES', "120")) * 60
 fbRegFilename = os.getenv('FILEBEAT_REGISTRY_FILE', "/usr/share/filebeat/data/registry/filebeat/data.json")
-currentDir = broDir + "current/"
-processedDir = broDir + "processed/"
+currentDir = f"{broDir}current/"
+processedDir = f"{broDir}processed/"
 
 import os, errno
 
@@ -66,8 +66,7 @@ def pruneFiles():
 
         # first check to see if it's in the filebeat registry
         if fbReg is not None:
-            fileStatInfo = os.stat(file)
-            if fileStatInfo:
+            if fileStatInfo := os.stat(file):
                 fileFound = any(
                     (
                         (entry['FileStateOS'])
@@ -81,9 +80,6 @@ def pruneFiles():
                     # we only want to delete files that filebeat has forgotten
                     # print "{} is found in registry!".format(file)
                     continue
-                # else:
-                # print "{} is NOT found in registry!".format(file)
-
         # now see if the file is in use by any other process in the system
         fuserProcess = Popen(["fuser", "-s", file], stdout=PIPE)
         fuserProcess.communicate()
@@ -106,14 +102,17 @@ def pruneFiles():
 
             if (cleanSeconds > 0) and (lastUseTime >= cleanSeconds):
                 # this is a closed file that is old, so delete it
-                print('removing old file "{}" ({}, used {} seconds ago)'.format(file, fileType, lastUseTime))
+                print(
+                    f'removing old file "{file}" ({fileType}, used {lastUseTime} seconds ago)'
+                )
+
                 silentRemove(file)
 
     # clean up any broken symlinks in the current/ directory
     for current in os.listdir(currentDir):
         currentFileSpec = os.path.join(currentDir, current)
         if os.path.islink(currentFileSpec) and not os.path.exists(currentFileSpec):
-            print('removing dead symlink "{}"'.format(currentFileSpec))
+            print(f'removing dead symlink "{currentFileSpec}"')
             silentRemove(currentFileSpec)
 
     # clean up any old and empty directories in processed/ directory
@@ -131,7 +130,7 @@ def pruneFiles():
         if dirAge >= cleanDirSeconds:
             try:
                 os.rmdir(dirToRm)
-                print('removed empty directory "{}" (used {} seconds ago)'.format(dirToRm, dirAge))
+                print(f'removed empty directory "{dirToRm}" (used {dirAge} seconds ago)')
             except OSError:
                 pass
 

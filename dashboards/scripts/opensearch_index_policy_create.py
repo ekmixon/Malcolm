@@ -47,7 +47,12 @@ def str2bool(v):
 def main():
     global debug
 
-    parser = argparse.ArgumentParser(description=scriptName, add_help=False, usage='{} <arguments>'.format(scriptName))
+    parser = argparse.ArgumentParser(
+        description=scriptName,
+        add_help=False,
+        usage=f'{scriptName} <arguments>',
+    )
+
     parser.add_argument(
         '-v', '--verbose', dest='debug', type=str2bool, nargs='?', const=True, default=False, help="Verbose output"
     )
@@ -142,91 +147,108 @@ def main():
         parser.print_help()
         exit(2)
 
-    debug = args.debug
-    if debug:
+    if debug := args.debug:
         eprint(os.path.join(scriptPath, scriptName))
-        eprint("Arguments: {}".format(sys.argv[1:]))
-        eprint("Arguments: {}".format(args))
+        eprint(f"Arguments: {sys.argv[1:]}")
+        eprint(f"Arguments: {args}")
     else:
         sys.tracebacklimit = 0
 
     # verify that age parameters are in the right format (number and units)
     for ageParam in (args.snapshotAge, args.coldAge, args.closeAge, args.deleteAge):
-        if not ((ageParam == '0') or re.match(r'^\d+[dhms]$', ageParam)):
+        if ageParam != '0' and not re.match(r'^\d+[dhms]$', ageParam):
             raise argparse.ArgumentTypeError(f'Invalid age parameter {ageParam}')
 
     # store policy information
-    policyDict = dict()
-    policyDict['policy_id'] = args.policyId
-    policyDict[
-        'description'
-    ] = f'Index state management policy to snapshot indices after {args.snapshotAge}, move them into a cold state after {args.coldAge} and delete them after {args.deleteAge}'
-    policyDict['last_updated_time'] = time.time_ns() // 1000000
+    policyDict = {
+        'policy_id': args.policyId,
+        'description': f'Index state management policy to snapshot indices after {args.snapshotAge}, move them into a cold state after {args.coldAge} and delete them after {args.deleteAge}',
+        'last_updated_time': time.time_ns() // 1000000,
+    }
+
     policyDict['schema_version'] = args.schemaVersion
     policyDict['error_notification'] = None
-
-    # list of states and their transitions
-    states = list()
 
     # hot -> snapshot -> cold -> closed -> deleted
 
     # hot state is default and always exists
     policyDict['default_state'] = POLICY_STATE_HOT
-    hotState = dict()
-    hotState['name'] = POLICY_STATE_HOT
-    hotState['actions'] = [{'replica_count': {'number_of_replicas': args.hotReplicaCount}}]
-    states.append(hotState)
+    hotState = {
+        'name': POLICY_STATE_HOT,
+        'actions': [
+            {'replica_count': {'number_of_replicas': args.hotReplicaCount}}
+        ],
+    }
 
+    states = [hotState]
     # create a "snapshot" state for backup and set the previous state's transition to it
     if args.snapshotAge != '0':
-        snapshotState = dict()
-        snapshotState['name'] = POLICY_STATE_SNAPSHOT
-        snapshotState['actions'] = [{'snapshot': {'repository': args.snapshotRepo, 'snapshot': args.snapshotName}}]
-        states[len(states) - 1]['transitions'] = [
-            {'state_name': POLICY_STATE_SNAPSHOT, 'conditions': {'min_index_age': args.snapshotAge}}
+        snapshotState = {
+            'name': POLICY_STATE_SNAPSHOT,
+            'actions': [
+                {
+                    'snapshot': {
+                        'repository': args.snapshotRepo,
+                        'snapshot': args.snapshotName,
+                    }
+                }
+            ],
+        }
+
+        states[-1]['transitions'] = [
+            {
+                'state_name': POLICY_STATE_SNAPSHOT,
+                'conditions': {'min_index_age': args.snapshotAge},
+            }
         ]
+
         states.append(snapshotState)
 
     # create a "cold" state for read-only indices and set the previous state's transition to it
     if args.coldAge != '0':
-        coldState = dict()
-        coldState['name'] = POLICY_STATE_COLD
-        coldState['actions'] = [{'read_only': {}}]
-        states[len(states) - 1]['transitions'] = [
-            {'state_name': POLICY_STATE_COLD, 'conditions': {'min_index_age': args.coldAge}}
+        coldState = {'name': POLICY_STATE_COLD, 'actions': [{'read_only': {}}]}
+        states[-1]['transitions'] = [
+            {
+                'state_name': POLICY_STATE_COLD,
+                'conditions': {'min_index_age': args.coldAge},
+            }
         ]
+
         states.append(coldState)
 
     # create a "closed" state for closed indices and set the previous state's transition to it
     if args.closeAge != '0':
-        closedState = dict()
-        closedState['name'] = POLICY_STATE_CLOSED
-        closedState['actions'] = [{'close': {}}]
-        states[len(states) - 1]['transitions'] = [
-            {'state_name': POLICY_STATE_CLOSED, 'conditions': {'min_index_age': args.closeAge}}
+        closedState = {'name': POLICY_STATE_CLOSED, 'actions': [{'close': {}}]}
+        states[-1]['transitions'] = [
+            {
+                'state_name': POLICY_STATE_CLOSED,
+                'conditions': {'min_index_age': args.closeAge},
+            }
         ]
+
         states.append(closedState)
 
     # create a "deleted" state for deleted indices and set the previous state's transition to it
     if args.deleteAge != '0':
-        deleteState = dict()
-        deleteState['name'] = POLICY_STATE_DELETE
-        deleteState['actions'] = [{'delete': {}}]
-        states[len(states) - 1]['transitions'] = [
-            {'state_name': POLICY_STATE_DELETE, 'conditions': {'min_index_age': args.deleteAge}}
+        deleteState = {'name': POLICY_STATE_DELETE, 'actions': [{'delete': {}}]}
+        states[-1]['transitions'] = [
+            {
+                'state_name': POLICY_STATE_DELETE,
+                'conditions': {'min_index_age': args.deleteAge},
+            }
         ]
+
         states.append(deleteState)
 
     # the final state doesn't transition
-    states[len(states) - 1]['transitions'] = []
+    states[-1]['transitions'] = []
 
     policyDict['states'] = states
     policyDict['ism_template'] = {
         'index_patterns': [x.strip() for x in args.indexPattern.split(',')],
         'priority': args.templatePriority,
     }
-    policy = dict()
-    policy['policy'] = policyDict
+    policy = {'policy': policyDict}
     print(json.dumps(policy))
 
 

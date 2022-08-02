@@ -58,7 +58,7 @@ def InstallerAskForString(question, default=None, forceInteraction=False):
 
 
 def TrueOrFalseQuote(expression):
-    return "'{}'".format('true' if expression else 'false')
+    return f"'{'true' if expression else 'false'}'"
 
 
 ###################################################################################################
@@ -119,13 +119,11 @@ class Installer(object):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def install_package(self, packages):
         result = False
-        pkgs = []
-
-        for package in packages:
-            if not self.package_is_installed(package):
-                pkgs.append(package)
-
-        if len(pkgs) > 0:
+        if pkgs := [
+            package
+            for package in packages
+            if not self.package_is_installed(package)
+        ]:
             for cmd in self.installPackageCmds:
                 ecode, out = self.run_process(cmd + pkgs, privileged=True)
                 if ecode == 0:

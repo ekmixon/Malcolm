@@ -97,58 +97,56 @@ def main():
 
     if dataError:
         # something is wrong with the json file
-        eprint("Error loading {} (not found or incorrectly formatted)".format(FIELDS_JSON_FILE))
+        eprint(
+            f"Error loading {FIELDS_JSON_FILE} (not found or incorrectly formatted)"
+        )
+
+
+    elif (len(sys.argv) == 2) and os.path.isfile(sys.argv[1]):
+
+        fieldsBitmap = 0
+
+        # loop over header lines in zeek log file (beginning with '#') and extract the header values
+        # into a dictionary containing, among other things:
+        #   - the "path" which is the zeek log type (eg., conn, weird, etc.)
+        #   - the "fields" list of field names
+        headers = {}
+        with open(sys.argv[1], "r") as zeekLogFile:
+            for line in zeekLogFile:
+                if not line.startswith('#'):
+                    break
+
+                values = line.strip().split(ZEEK_LOG_DELIMITER)
+                key = values.pop(0)[1:]
+                headers[key] = values[0] if len(values) == 1 else values
+        if (
+            (ZEEK_LOG_HEADER_LOGTYPE in headers)
+            and (ZEEK_LOG_HEADER_FIELDS in headers)  # the "path" header exists
+            and (headers[ZEEK_LOG_HEADER_LOGTYPE] in zeekLogFields)  # the "fields" header exists
+        ):  # this zeek log type is one we're concerned with mapping
+
+            # the set of field names in *this* log file
+            logFieldNames = OrderedSet(headers[ZEEK_LOG_HEADER_FIELDS])
+
+            for versionIdx, allFieldNames in reversed(
+                list(enumerate(zeekLogFields[headers[ZEEK_LOG_HEADER_LOGTYPE]]))
+            ):
+
+                # are this logfile's fields a subset of the complete list?
+                if logFieldNames.issubset(allFieldNames):
+
+                    # determine which fields in the complete list are included in this log file
+                    for i, fName in enumerate(allFieldNames):
+                        fieldsBitmap = set_bit(fieldsBitmap, i, fName in logFieldNames)
+
+                    # eprint(fieldsBitmap)
+                    print('{0}x{1:02X}x{2:08X}'.format(ZEEK_LOG_BITMAP_PREFIX, versionIdx, fieldsBitmap))
+                    errCode = os.EX_OK
 
     else:
-        if (len(sys.argv) == 2) and os.path.isfile(sys.argv[1]):
-
-            fieldsBitmap = 0
-
-            # loop over header lines in zeek log file (beginning with '#') and extract the header values
-            # into a dictionary containing, among other things:
-            #   - the "path" which is the zeek log type (eg., conn, weird, etc.)
-            #   - the "fields" list of field names
-            headers = {}
-            with open(sys.argv[1], "r") as zeekLogFile:
-                for line in zeekLogFile:
-                    if line.startswith('#'):
-                        values = line.strip().split(ZEEK_LOG_DELIMITER)
-                        key = values.pop(0)[1:]
-                        if len(values) == 1:
-                            headers[key] = values[0]
-                        else:
-                            headers[key] = values
-                    else:
-                        break
-
-            if (
-                (ZEEK_LOG_HEADER_LOGTYPE in headers)
-                and (ZEEK_LOG_HEADER_FIELDS in headers)  # the "path" header exists
-                and (headers[ZEEK_LOG_HEADER_LOGTYPE] in zeekLogFields)  # the "fields" header exists
-            ):  # this zeek log type is one we're concerned with mapping
-
-                # the set of field names in *this* log file
-                logFieldNames = OrderedSet(headers[ZEEK_LOG_HEADER_FIELDS])
-
-                for versionIdx, allFieldNames in reversed(
-                    list(enumerate(zeekLogFields[headers[ZEEK_LOG_HEADER_LOGTYPE]]))
-                ):
-
-                    # are this logfile's fields a subset of the complete list?
-                    if logFieldNames.issubset(allFieldNames):
-
-                        # determine which fields in the complete list are included in this log file
-                        for i, fName in enumerate(allFieldNames):
-                            fieldsBitmap = set_bit(fieldsBitmap, i, fName in logFieldNames)
-
-                        # eprint(fieldsBitmap)
-                        print('{0}x{1:02X}x{2:08X}'.format(ZEEK_LOG_BITMAP_PREFIX, versionIdx, fieldsBitmap))
-                        errCode = os.EX_OK
-
-        else:
             # invalid command-line arguments
-            eprint("{} <Zeek log file>".format(sys.argv[0]))
-            errCode = os.EX_USAGE
+        eprint(f"{sys.argv[0]} <Zeek log file>")
+        errCode = os.EX_USAGE
 
     return errCode
 

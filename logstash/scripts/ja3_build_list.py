@@ -49,7 +49,12 @@ def str2bool(v):
 def main():
     global debug
 
-    parser = argparse.ArgumentParser(description=scriptName, add_help=False, usage='{} <arguments>'.format(scriptName))
+    parser = argparse.ArgumentParser(
+        description=scriptName,
+        add_help=False,
+        usage=f'{scriptName} <arguments>',
+    )
+
     parser.add_argument(
         '-v', '--verbose', dest='debug', type=str2bool, nargs='?', const=True, default=False, help="Verbose output"
     )
@@ -63,11 +68,10 @@ def main():
         parser.print_help()
         exit(2)
 
-    debug = args.debug
-    if debug:
+    if debug := args.debug:
         eprint(os.path.join(scriptPath, scriptName))
-        eprint("Arguments: {}".format(sys.argv[1:]))
-        eprint("Arguments: {}".format(args))
+        eprint(f"Arguments: {sys.argv[1:]}")
+        eprint(f"Arguments: {args}")
     else:
         sys.tracebacklimit = 0
 
@@ -86,7 +90,7 @@ def main():
                 ):
                     ja3Map[fingerprint['md5']].append(fingerprint['User-Agent'].strip('"').strip("'"))
         except Exception as e:
-            eprint('"{}" raised for "{}"'.format(str(e), fingerprint))
+            eprint(f'"{str(e)}" raised for "{fingerprint}"')
 
     try:
         url = (
@@ -95,18 +99,20 @@ def main():
         keys = ['record_tls_version', 'ciphersuite', 'extensions', 'e_curves', 'ec_point_fmt']
         for fingerprint in [x for x in requests.get(url).text.splitlines() if (len(x) > 0) and (not x.startswith('#'))]:
             try:
-                values = list()
                 tmpMap = defaultdict(str)
-                tmpMap.update(json.loads(fingerprint))
-                for key in keys:
-                    values.append('-'.join([str(int(x, 0)) for x in tmpMap[key].split()]))
+                tmpMap |= json.loads(fingerprint)
+                values = [
+                    '-'.join([str(int(x, 0)) for x in tmpMap[key].split()])
+                    for key in keys
+                ]
+
                 ja3Map[hashlib.md5(','.join(values).encode()).hexdigest()].extend(
                     tmpMap['desc'].strip('"').strip("'").split(' / ')
                 )
             except Exception as e:
-                eprint('"{}" raised for "{}"'.format(str(e), fingerprint))
+                eprint(f'"{str(e)}" raised for "{fingerprint}"')
     except Exception as e:
-        eprint('"{}" raised for "{}"'.format(str(e), fingerprint))
+        eprint(f'"{str(e)}" raised for "{fingerprint}"')
 
     urls = ['https://raw.githubusercontent.com/trisulnsm/ja3prints/master/ja3fingerprint.json']
     for url in urls:
@@ -115,14 +121,14 @@ def main():
                 x for x in requests.get(url).text.splitlines() if (len(x) > 0) and (not x.startswith('#'))
             ]:
                 try:
-                    values = list()
+                    values = []
                     tmpMap = defaultdict(str)
-                    tmpMap.update(json.loads(fingerprint))
+                    tmpMap |= json.loads(fingerprint)
                     ja3Map[tmpMap['ja3_hash'].strip()].append(tmpMap['desc'].strip('"').strip("'"))
                 except Exception as e:
-                    eprint('"{}" raised for "{}"'.format(str(e), fingerprint))
+                    eprint(f'"{str(e)}" raised for "{fingerprint}"')
         except Exception as e:
-            eprint('"{}" raised for "{}"'.format(str(e), fingerprint))
+            eprint(f'"{str(e)}" raised for "{fingerprint}"')
 
     # this one has desc and ja3_hash backwards from the previous one
     urls = ['https://raw.githubusercontent.com/trisulnsm/ja3prints/master/newprints.json']
@@ -132,14 +138,14 @@ def main():
                 x for x in requests.get(url).text.splitlines() if (len(x) > 0) and (not x.startswith('#'))
             ]:
                 try:
-                    values = list()
+                    values = []
                     tmpMap = defaultdict(str)
-                    tmpMap.update(json.loads(fingerprint))
+                    tmpMap |= json.loads(fingerprint)
                     ja3Map[tmpMap['desc'].strip()].append(tmpMap['ja3_hash'].strip('"').strip("'"))
                 except Exception as e:
-                    eprint('"{}" raised for "{}"'.format(str(e), fingerprint))
+                    eprint(f'"{str(e)}" raised for "{fingerprint}"')
         except Exception as e:
-            eprint('"{}" raised for "{}"'.format(str(e), fingerprint))
+            eprint(f'"{str(e)}" raised for "{fingerprint}"')
 
     # this one is csv (and overlaps the previous one a lot)
     try:
@@ -149,14 +155,15 @@ def main():
             if (len(vals) == 2) and (len(vals[0]) == 32):
                 ja3Map[vals[0].strip()].append(vals[1].strip('"').strip("'"))
     except Exception as e:
-        eprint('"{}" raised for "{}"'.format(str(e), fingerprint))
+        eprint(f'"{str(e)}" raised for "{fingerprint}"')
 
     # todo: https://sslbl.abuse.ch/ja3-fingerprints/
 
-    finalMap = dict()
-    for k, v in ja3Map.items():
-        if (len(k) == 32) and all(c in string.hexdigits for c in k):
-            finalMap[k] = list(set([element.strip('"').strip("'").strip() for element in v]))
+    finalMap = {
+        k: list({element.strip('"').strip("'").strip() for element in v})
+        for k, v in ja3Map.items()
+        if (len(k) == 32) and all(c in string.hexdigits for c in k)
+    }
 
     with open(args.output, 'w+') as outfile:
         yaml.dump(finalMap, outfile)

@@ -94,132 +94,134 @@ def keystore_op(service, dropPriv=False, *keystore_args, **run_process_kwargs):
 
     try:
 
-        composeFileLines = list()
+        composeFileLines = []
         uidGidDict['PUID'] = f'{os.getuid()}' if (pyPlatform != PLATFORM_WINDOWS) else '1000'
         uidGidDict['PGID'] = f'{os.getgid()}' if (pyPlatform != PLATFORM_WINDOWS) else '1000'
         with open(args.composeFile, 'r') as f:
             allLines = f.readlines()
             composeFileLines = [x for x in allLines if re.search(fr'-.*?{service}.keystore\s*:.*{service}.keystore', x)]
-            uidGidDict.update(
-                dict(
-                    x.split(':')
-                    for x in [''.join(x.split()) for x in allLines if re.search(fr'^\s*P[UG]ID\s*:\s*\d+\s*$', x)]
-                )
+            uidGidDict |= dict(
+                x.split(':')
+                for x in [
+                    ''.join(x.split())
+                    for x in allLines
+                    if re.search(fr'^\s*P[UG]ID\s*:\s*\d+\s*$', x)
+                ]
             )
+
 
         if (len(composeFileLines) == 1) and (len(composeFileLines[0]) > 0):
-            matches = re.search(
+            if matches := re.search(
                 fr'-\s*(?P<localKeystore>.*?{service}.keystore)\s*:\s*(?P<volumeKeystore>.*?{service}.keystore)',
                 composeFileLines[0],
-            )
-            if matches:
-                localKeystore = os.path.realpath(matches.group('localKeystore'))
+            ):
+                localKeystore = os.path.realpath(matches['localKeystore'])
                 localKeystoreDir = os.path.dirname(localKeystore)
-                volumeKeystore = matches.group('volumeKeystore')
+                volumeKeystore = matches['volumeKeystore']
                 volumeKeystoreDir = os.path.dirname(volumeKeystore)
 
-        if (localKeystore is not None) and (volumeKeystore is not None) and os.path.isdir(localKeystoreDir):
-            localKeystorePreExists = os.path.isfile(localKeystore)
+        if (
+            localKeystore is None
+            or volumeKeystore is None
+            or not os.path.isdir(localKeystoreDir)
+        ):
+            raise Exception(f'Unable to identify a unique keystore file bind mount for {service} in {args.composeFile}')
 
-            dockerCmd = None
+        localKeystorePreExists = os.path.isfile(localKeystore)
 
-            # determine if Malcolm is running; if so, we'll use docker-compose exec, other wise we'll use docker run
-            err, out = run_process(
-                [dockerComposeBin, '-f', args.composeFile, 'ps', '-q', service], env=osEnv, debug=args.debug
-            )
-            out[:] = [x for x in out if x]
-            if (err == 0) and (len(out) > 0):
-                # Malcolm is running, we can use an existing container
+        dockerCmd = None
 
-                # assemble the service-keystore command
-                dockerCmd = [
-                    dockerComposeBin,
-                    'exec',
-                    # if using stdin, indicate the container is "interactive", else noop (duplicate --rm)
-                    '-T' if ('stdin' in run_process_kwargs and run_process_kwargs['stdin']) else '',
-                    # execute as UID:GID in docker-compose.yml file
-                    '-u',
-                    f'{uidGidDict["PUID"]}:{uidGidDict["PGID"]}'
-                    # the work directory in the container is the directory to contain the keystore file
-                    '-w',
-                    volumeKeystoreDir,
-                    # the service name
-                    service,
-                    # the executable filespec
-                    keystoreBinProc,
-                ]
+        # determine if Malcolm is running; if so, we'll use docker-compose exec, other wise we'll use docker run
+        err, out = run_process(
+            [dockerComposeBin, '-f', args.composeFile, 'ps', '-q', service], env=osEnv, debug=args.debug
+        )
+        out[:] = [x for x in out if x]
+        if (err == 0) and (len(out) > 0):
+            # Malcolm is running, we can use an existing container
 
-            else:
-                # Malcolm isn't running, do 'docker run' to spin up a temporary container to run the ocmmand
-
-                # "grep" the docker image out of the service's image: value from the docker-compose YML file
-                serviceImage = None
-                composeFileLines = list()
-                with open(args.composeFile, 'r') as f:
-                    composeFileLines = [x for x in f.readlines() if f'image: malcolmnetsec/{service}' in x]
-                if (len(composeFileLines) > 0) and (len(composeFileLines[0]) > 0):
-                    imageLineValues = composeFileLines[0].split()
-                    if len(imageLineValues) > 1:
-                        serviceImage = imageLineValues[1]
-
-                if serviceImage is not None:
-                    # assemble the service-keystore command
-                    dockerCmd = [
-                        dockerBin,
-                        'run',
-                        # remove the container when complete
-                        '--rm',
-                        # if using stdin, indicate the container is "interactive", else noop
-                        '-i' if ('stdin' in run_process_kwargs and run_process_kwargs['stdin']) else '',
-                        # if     dropPriv, dockerUidGuidSetup will take care of dropping privileges for the correct UID/GID
-                        # if NOT dropPriv, enter with the keystore executable directly
-                        '--entrypoint',
-                        dockerUidGuidSetup if dropPriv else keystoreBinProc,
-                        '--env',
-                        f'DEFAULT_UID={uidGidDict["PUID"]}',
-                        '--env',
-                        f'DEFAULT_GID={uidGidDict["PGID"]}',
-                        '--env',
-                        f'PUSER_CHOWN={volumeKeystoreDir}',
-                        # rw bind mount the local directory to contain the keystore file to the container directory
-                        '-v',
-                        f'{localKeystoreDir}:{volumeKeystoreDir}:rw',
-                        # the work directory in the container is the directory to contain the keystore file
-                        '-w',
-                        volumeKeystoreDir,
-                        # if     dropPriv, execute as root, as docker-uid-gid-setup.sh will drop privileges for us
-                        # if NOT dropPriv, execute as UID:GID in docker-compose.yml file
-                        '-u',
-                        'root' if dropPriv else f'{uidGidDict["PUID"]}:{uidGidDict["PGID"]}',
-                        # the service image name grepped from the YML file
-                        serviceImage,
-                    ]
-
-                    if dropPriv:
-                        # the keystore executable filespec (as we used dockerUidGuidSetup as the entrypoint)
-                        dockerCmd.append(keystoreBinProc)
-
-                else:
-                    raise Exception(f'Unable to identify docker image for {service} in {args.composeFile}')
-
-            if dockerCmd is not None:
-
-                # append whatever other arguments to pass to the executable filespec
-                if keystore_args:
-                    dockerCmd.extend(list(keystore_args))
-
-                dockerCmd[:] = [x for x in dockerCmd if x]
-
-                # execute the command, passing through run_process_kwargs to run_process as expanded keyword arguments
-                err, results = run_process(dockerCmd, env=osEnv, debug=args.debug, **run_process_kwargs)
-                if (err != 0) or (not os.path.isfile(localKeystore)):
-                    raise Exception(f'Error processing command {service} keystore: {results}')
-
-            else:
-                raise Exception(f'Unable formulate keystore command for {service} in {args.composeFile}')
+            # assemble the service-keystore command
+            dockerCmd = [
+                dockerComposeBin,
+                'exec',
+                # if using stdin, indicate the container is "interactive", else noop (duplicate --rm)
+                '-T' if ('stdin' in run_process_kwargs and run_process_kwargs['stdin']) else '',
+                # execute as UID:GID in docker-compose.yml file
+                '-u',
+                f'{uidGidDict["PUID"]}:{uidGidDict["PGID"]}'
+                # the work directory in the container is the directory to contain the keystore file
+                '-w',
+                volumeKeystoreDir,
+                # the service name
+                service,
+                # the executable filespec
+                keystoreBinProc,
+            ]
 
         else:
-            raise Exception(f'Unable to identify a unique keystore file bind mount for {service} in {args.composeFile}')
+            # Malcolm isn't running, do 'docker run' to spin up a temporary container to run the ocmmand
+
+            # "grep" the docker image out of the service's image: value from the docker-compose YML file
+            serviceImage = None
+            composeFileLines = []
+            with open(args.composeFile, 'r') as f:
+                composeFileLines = [x for x in f.readlines() if f'image: malcolmnetsec/{service}' in x]
+            if composeFileLines and len(composeFileLines[0]) > 0:
+                imageLineValues = composeFileLines[0].split()
+                if len(imageLineValues) > 1:
+                    serviceImage = imageLineValues[1]
+
+            if serviceImage is None:
+                raise Exception(f'Unable to identify docker image for {service} in {args.composeFile}')
+
+            # assemble the service-keystore command
+            dockerCmd = [
+                dockerBin,
+                'run',
+                # remove the container when complete
+                '--rm',
+                # if using stdin, indicate the container is "interactive", else noop
+                '-i' if ('stdin' in run_process_kwargs and run_process_kwargs['stdin']) else '',
+                # if     dropPriv, dockerUidGuidSetup will take care of dropping privileges for the correct UID/GID
+                # if NOT dropPriv, enter with the keystore executable directly
+                '--entrypoint',
+                dockerUidGuidSetup if dropPriv else keystoreBinProc,
+                '--env',
+                f'DEFAULT_UID={uidGidDict["PUID"]}',
+                '--env',
+                f'DEFAULT_GID={uidGidDict["PGID"]}',
+                '--env',
+                f'PUSER_CHOWN={volumeKeystoreDir}',
+                # rw bind mount the local directory to contain the keystore file to the container directory
+                '-v',
+                f'{localKeystoreDir}:{volumeKeystoreDir}:rw',
+                # the work directory in the container is the directory to contain the keystore file
+                '-w',
+                volumeKeystoreDir,
+                # if     dropPriv, execute as root, as docker-uid-gid-setup.sh will drop privileges for us
+                # if NOT dropPriv, execute as UID:GID in docker-compose.yml file
+                '-u',
+                'root' if dropPriv else f'{uidGidDict["PUID"]}:{uidGidDict["PGID"]}',
+                # the service image name grepped from the YML file
+                serviceImage,
+            ]
+
+            if dropPriv:
+                # the keystore executable filespec (as we used dockerUidGuidSetup as the entrypoint)
+                dockerCmd.append(keystoreBinProc)
+
+        if dockerCmd is None:
+            raise Exception(f'Unable formulate keystore command for {service} in {args.composeFile}')
+
+        # append whatever other arguments to pass to the executable filespec
+        if keystore_args:
+            dockerCmd.extend(list(keystore_args))
+
+        dockerCmd[:] = [x for x in dockerCmd if x]
+
+        # execute the command, passing through run_process_kwargs to run_process as expanded keyword arguments
+        err, results = run_process(dockerCmd, env=osEnv, debug=args.debug, **run_process_kwargs)
+        if (err != 0) or (not os.path.isfile(localKeystore)):
+            raise Exception(f'Error processing command {service} keystore: {results}')
 
     except Exception as e:
         if err == 0:
@@ -227,14 +229,12 @@ def keystore_op(service, dropPriv=False, *keystore_args, **run_process_kwargs):
 
         # don't be so whiny if the "create" failed just because it already existed or a 'remove' failed on a nonexistant item
         if (
-            (not args.debug)
-            and list(keystore_args)
-            and (len(list(keystore_args)) > 0)
-            and (list(keystore_args)[0].lower() in ('create', 'remove'))
-            and localKeystorePreExists
+            args.debug
+            or not list(keystore_args)
+            or len(list(keystore_args)) <= 0
+            or list(keystore_args)[0].lower() not in ('create', 'remove')
+            or not localKeystorePreExists
         ):
-            pass
-        else:
             eprint(e)
 
     # success = (error == 0)
@@ -340,13 +340,11 @@ def logs():
         if output:
             outputStr = output.decode().strip()
             outputStrEscaped = EscapeAnsi(outputStr)
-            if ignoreRegEx.match(outputStrEscaped):
-                pass  ### print(f'!!!!!!!: {outputStr}')
-            else:
+            if not ignoreRegEx.match(outputStrEscaped):
                 serviceMatch = serviceRegEx.search(outputStrEscaped)
                 serviceMatchFmt = serviceRegEx.search(outputStr) if coloramaImported else serviceMatch
-                serviceStr = serviceMatchFmt.group('service') if (serviceMatchFmt is not None) else ''
-                messageStr = serviceMatch.group('message') if (serviceMatch is not None) else ''
+                serviceStr = serviceMatchFmt['service'] if serviceMatchFmt is not None else ''
+                messageStr = serviceMatch['message'] if serviceMatch is not None else ''
                 outputJson = LoadStrIfJson(messageStr)
                 if outputJson is not None:
 
@@ -380,13 +378,13 @@ def logs():
                         jobStatus = outputJson['msg']
                         if (len(outputJson.keys()) == 2) and ('job.command' in outputJson) and ('msg' in outputJson):
                             # if it's the most common status (starting or job succeeded) then don't print unless debug mode
-                            if args.debug or ((jobStatus != 'starting') and (jobStatus != 'job succeeded')):
+                            if args.debug or jobStatus not in [
+                                'starting',
+                                'job succeeded',
+                            ]:
                                 print(
                                     f"{serviceStr}{Style.RESET_ALL if coloramaImported else ''} {timeStr} {jobCmd}: {jobStatus}"
                                 )
-                            else:
-                                pass
-
                         else:
                             # standardize and print the JSON output
                             print(
@@ -542,9 +540,7 @@ def start():
         try:
             os.makedirs(path)
         except OSError as exc:
-            if (exc.errno == errno.EEXIST) and os.path.isdir(path):
-                pass
-            else:
+            if exc.errno != errno.EEXIST or not os.path.isdir(path):
                 raise
 
     # touch the zeek intel file
@@ -638,7 +634,7 @@ def authSetup(wipe=False):
 
         # if the admininstrator username has changed, remove the previous administrator username from htpasswd
         if (usernamePrevious is not None) and (usernamePrevious != username):
-            htpasswdLines = list()
+            htpasswdLines = []
             with open(htpasswdFile, 'r') as f:
                 htpasswdLines = f.readlines()
             with open(htpasswdFile, 'w') as f:
@@ -913,9 +909,9 @@ def authSetup(wipe=False):
             try:
                 os.makedirs(filebeatPath)
             except OSError as exc:
-                if (exc.errno == errno.EEXIST) and os.path.isdir(filebeatPath):
-                    pass
-                else:
+                if exc.errno != errno.EEXIST or not os.path.isdir(
+                    filebeatPath
+                ):
                     raise
 
             # remove previous files in filebeat/certs
@@ -1122,9 +1118,7 @@ def main():
         try:
             os.makedirs(MalcolmTmpPath)
         except OSError as exc:
-            if (exc.errno == errno.EEXIST) and os.path.isdir(MalcolmTmpPath):
-                pass
-            else:
+            if exc.errno != errno.EEXIST or not os.path.isdir(MalcolmTmpPath):
                 raise
 
         # docker-compose use local temporary path
